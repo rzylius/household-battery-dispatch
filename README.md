@@ -1,16 +1,6 @@
 "# household battery dispatch" 
 
-Houshehold battery optimization scenario to be implemented
-
-
-# Example usage:
-battery_capacity = 15  # kWh
-#hourly_prices = p
-hourly_prices = [15, 18, 19, 10, 10, 10, 10, 10, 10, 10, 10, 12, 14, 15, 15, 13, 14, 12, 15, 14, 13, 11, 10, 13]
-initial_soc = 10  # kWh
-target_soc = 10  # kWh
-hourly_consumption = 1.2 # kwh the house consumes approx every hour
-cost_of_cycle = 5 # cents it costs per charge/discharge cycle of the battery (depreciacion costs)
+# Houshehold battery optimization scenario to be implemented
 
 
 Household consumes power at constant rate of **hourly_consumption**, which can be satisfied from the grid or battery.
