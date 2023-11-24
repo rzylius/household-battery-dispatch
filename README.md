@@ -84,3 +84,7 @@ for k,v in result['OptimizationResult'].items():
     print(f"{k:>25}: {v:.2f}")
   else: print(f"{k:>25}: {v}")
 ```
+
+# Contributions
+
+Major and essential contribution of https://github.com/AudrunasGruslys
