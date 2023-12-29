@@ -39,10 +39,10 @@ Usage example can be tested in Examples
 battery_capacity = 15  # kWh
 hourly_prices = p
 hour_number = h
-initial_soc = 0.87  # %
-final_soc= 0.5 # %
-max_soc=1 # %
-min_dod=0.2 # %
+initial_soc = 0.87  # 
+final_soc= 0.5 # 
+max_soc=1 # 
+min_dod=0.2 # 
 final_energy_value_per_kwh = 12 #  Estimate value of energy the first hour next day that helps us to decide what stateof charge should be left.
 hourly_consumption = [1.6 for i in range(len(hourly_prices))]
 cost_of_cycle_kwh = 5 # cents it costs per charge/discharge kwh (not cycle) of the battery (depreciacion costs)
