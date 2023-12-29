@@ -8,7 +8,7 @@ The aim of the code is to optimize household battery usage taking leverage of th
 
 **Scenario**
 
-Household consumes power at constant rate of **hourly_consumption**, which can be satisfied from the grid or battery.
+Household consumes power at rate of **hourly_consumption** (expressed as a list of values), which can be satisfied from the grid or battery.
 
 Battery can receive these commands:
 - charge - battery is charged at variable rate (not exceeding maximum rate setting), the same time all household consumption is satisfied from the grid
