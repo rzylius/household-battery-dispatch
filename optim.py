@@ -54,7 +54,7 @@ class EnergyOptimizer():
 
     def add_fixed_consumption(self, name, hourly_consumption):  
         """
-        Add simple fixed hourly consumption.
+        Add simple fixed hourly consumption that can not be optimized.
         """  
         assert len(hourly_consumption) == self.n_hours
         consumption = pulp.LpVariable.dicts(name + "_consumption", self.hours, lowBound = 0, upBound= np.amax(hourly_consumption))
@@ -62,11 +62,34 @@ class EnergyOptimizer():
             assert hourly_consumption[hour] >= 0 
             self._add_to_energy_balance(hour, -consumption[hour])
             self.problem += consumption[hour] == hourly_consumption[hour]
+        return consumption
+
+    def add_consumption_by(self, name, max_power, min_cumulative_consuption):  
+        """
+        Adds a total consumption demand by a fixed hour. Useful when planning charging of electric cars.
+        max_power:
+          maximum charger power
+        min_cumulative_consuption:
+          energy consumption (e.g. electric car charging) that has to happen on or before a set hour. For instance, if the only
+          demand is to have a car charged by 10kWh in 5 hours time, one can add min_cumulative_consuption=[0,0,0,0,10] requirement.
+          However, one can also demant that half would be charhed in 3 hours time (because of, say, potential emergencies)
+          and another half has to be charged in 5 hours time: [0,0,5,0,10]. Depending on pricing and other constraints
+          (such as max_power constraint) the algorithm may chose to do this earlier, e.g. may distribute charging as [2,2,1,5,0]
+        """  
+        assert len(min_cumulative_consuption) == self.n_hours
+        consumption = pulp.LpVariable.dicts(name + "_consumption", self.hours, lowBound = 0, upBound=max_power)
+        cumul_consumption = 0.0
+        for hour in self.hours:
+            assert min_cumulative_consuption[hour] >= 0 
+            self._add_to_energy_balance(hour, -consumption[hour])
+            cumul_consumption = cumul_consumption + consumption[hour]
+            self.problem += cumul_consumption >= min_cumulative_consuption[hour]
         return consumption    
+    
 
     def add_heating_consumption(self, name, max_heat_power, hourly_demand, tol_cumul_min, tol_cumul_max, final_energy_value_per_kwh):  
         """
-        Models a heat pump consumption that may be throttled up or down within desired boubnds.
+        Models a heat pump consumption that may be throttled up or down within desired bounds.
         We are operating in electricity kWh and not heat kWh (that would be further multipled by COP)
         hourly_demand must be expressed in electricity kWh
         Arguments:
@@ -74,10 +97,11 @@ class EnergyOptimizer():
               It should be calculated using weather forecast data and known tabulated heating power values
               for a given house at a steady state
            tol_cumul_min/max - minimal and maximal deviations of planned cumulative heating power from its target;
-              as house temperature change is proportional to the cumulative heating input minus external cooling loss,
-              house temperature tolerance can be expressed in terms of cumulative heating toleance. 
+              as house temperature change is proportional to the cumulative heating input minus external cooling loss (the later is fixed),
+              house temperature tolerance can be expressed in terms of cumulative heating energy toleance which can
+              be estimated from known temperature-gradient vs heating energy table (outside of the scope of this function) 
               Cumulative power deviations from hourly_demand is proportional to temperature drop or rise inside the house.
-              If the house is alsoready too cold/hot,
+              If the house is already too cold/hot,
               the appropriate min/max value should be set to 0. tol_cumul_min <= 0; tol_cumul_max >= 0
               If tolerance is zero on both sides then the system has no space for heating optimizations.
            final_energy_value_per_kwh - estimated electricity price after the last hour with known price; depending on this
@@ -105,4 +129,4 @@ class EnergyOptimizer():
             self.problem += self.energy_balance[hour] == 0
         self.problem += self.total_cost    
         status = self.problem.solve()
-        print(status)
+
