@@ -1,23 +1,57 @@
 from optim import EnergyOptimizer
+import numpy as np
 
 
-
-def simple_example():
-    # Example usage:
-    hourly_prices = [15, 18, 19, 10, 10, 10, 10, 10, 10, 10, 10, 12, 14, 15, 15, 13, 14, 12, 15, 14, 13, 11, 10, 13]
+def test_battery():
     # Without the battery the below consumption demand is unsolvable, as it iexceeds supply power
+    
+    n = 24
+    optimizer = EnergyOptimizer(n)
+
+    # Setup power grid connection.
+    max_mains_power = 10
+    hourly_prices = [15, 18, 19, 10, 10, 10, 10, 10, 10, 10, 10, 12, 14, 15, 15, 13, 14, 12, 15, 14, 13, 11, 10, 13]
+    optimizer.add_mains_electricity_supply(name='mains', max_power=max_mains_power, hourly_prices=hourly_prices)
+
+    # Setup a battery.
+    battery_capacity = 15
+    initial_soc = 10
+    efficiency = 0.95
+    max_charge_power = 5
+    max_discharge_power = 15
+    optimizer.add_battery(
+        name='battery', capacity=battery_capacity, initial_soc=initial_soc, efficiency=efficiency,
+        max_charge_power=max_charge_power, max_discharge_power=max_discharge_power,
+        cost_of_cycle_kwh=1, final_energy_value_per_kwh=12)
+    
+    # Set fixed consumption schedule.
     hourly_consumption = [1, 1, 2, 1, 1, 1, 2, 1, 2, 5, 1, 2, 3, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    optimizer.add_fixed_consumption(name='consumption', hourly_consumption=hourly_consumption)
 
-    optimizer = EnergyOptimizer(len(hourly_prices))
-
-    electricity_import = optimizer.add_mains_electricity_supply(name='eso', max_power=10, hourly_prices=hourly_prices)
-    soc, charge_rate, discharge_rate = optimizer.add_battery(name='battery', capacity=15, initial_soc=10, efficiency=0.95, max_charge_power=5, max_discharge_power=5, cost_of_cycle_kwh=1, final_energy_value_per_kwh=12)
-    consumption = optimizer.add_fixed_consumption(name='consumption', hourly_consumption=hourly_consumption)
-
+    # Solve the optimization problem.
     optimizer.solve()
 
-    for hour in range(len(hourly_prices)):
-        print(hour, "consumption=", consumption[hour].varValue, "import=", electricity_import[hour].varValue, "soc=", soc[hour].varValue, "charge_rate=", charge_rate[hour].varValue, "discharge_rate=", discharge_rate[hour].varValue)
+    # Obtain solved time series as a nested dict of numpy arrays.
+    series = optimizer.get_time_series()
+    print(series)
+
+    # Test constraints.
+    assert np.all(series['mains']['import'] >= 0)
+    assert np.all(series['mains']['import'] <= max_mains_power)
+    assert np.all(series['battery']['discharge_rate'] <= 0)
+    assert np.all(series['battery']['discharge_rate'] >= -max_discharge_power)
+    assert np.all(series['battery']['charge_rate'] >= 0)
+    assert np.all(series['battery']['charge_rate'] <= max_charge_power)
+
+    # Test energy conservation.
+    np.testing.assert_allclose(series['mains']['import'] - series['battery']['charge_rate'] - series['battery']['discharge_rate'] * efficiency, hourly_consumption, atol=1e-6)
+
+    # Test charge conservation.
+    soc = series['battery']['soc']
+    previous_soc = np.zeros(n, dtype=np.float32)
+    previous_soc[1:] = soc[0:-1]
+    previous_soc[0] = initial_soc
+    np.testing.assert_allclose(soc - previous_soc, series['battery']['charge_rate'] + series['battery']['discharge_rate'], atol=1e-6)
 
 
 def simple_heatpump_example():
@@ -39,8 +73,8 @@ def simple_heatpump_example():
 
     optimizer.solve()
 
-    for hour in range(len(hourly_prices)):
-        print(hour, "consumption=", consumption[hour].varValue, "import=", electricity_import[hour].varValue, "soc=", soc[hour].varValue, "charge_rate=", charge_rate[hour].varValue, "discharge_rate=", discharge_rate[hour].varValue, 'heating_power=', heating_power[hour].varValue, 'ev_charging=', ev_charging[hour].varValue)
+    series = optimizer.get_time_series()
+    print(series)
 
 
-simple_heatpump_example()
+test_battery()
