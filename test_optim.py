@@ -78,3 +78,4 @@ def simple_heatpump_example():
 
 
 test_battery()
+simple_heatpump_example()
