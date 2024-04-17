@@ -2,11 +2,15 @@ household battery dispatch
 
  # Houshehold battery optimization scenario 
 
- Most of the battery optimization code I found optimizes trading scenarios of commercial battery installations. Household battery optimization 
-demands are different, so we try to develop a usable home battery optimization code.
+ Most of the battery optimization code we found optimizes trading scenarios of commercial battery installations. Household battery optimization demands are different from industrial uses, so we try to develop a usable home battery optimization code.
 
- The aim of the code is to optimize household battery usage taking leverage of the hourly tarriff. The idea of the optimization is to shift 
-household energy consumption to cheapest hours.
+ The aim of the code is to optimize household battery usage taking leverage of the hourly tarriff. The idea of the optimization is to shift household energy consumption shiftin loads from most expensive to cheapes hours.
+
+ Furthermore, we add to the equation major energy consumers with their particular behaviors and constraints. e.g. electric vehicle, heat pump.
+
+ Further we will add PV generation forecast into the equation.
+
+ 
 
  **Scenario**
 

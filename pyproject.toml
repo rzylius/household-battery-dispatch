@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "household battery dispatch"
+version = "0.5.1"
+description = "Usable algorithm for the household battery dispatch. It aims to optimize battery and other equipment (heatpump, EV, solar panels) usage to load shift from expensive to cheapes hours, considering all practical constraints"
+authors = ["Rimantas Zylius, Audrunas Gruslys"]
+license = "MIT license"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+PuLP = "^2.8.0"
+numpy = "^1.26.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
