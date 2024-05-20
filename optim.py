@@ -80,13 +80,15 @@ class EnergyOptimizer():
             self._add_to_energy_balance(hour, electricity_import[hour])
         return electricity_import
 
-    def add_battery(self, name, capacity, initial_soc, efficiency, max_charge_power, max_discharge_power, cost_of_cycle_kwh, final_energy_value_per_kwh):  
+    def add_battery(self, name, capacity, initial_soc, final_soc, min_soc, max_soc, efficiency, max_charge_power, max_discharge_power, cost_of_cycle_kwh, final_energy_value_per_kwh):  
         """
-        Add battery into the system. Assumied minimal state of charge is 0 - if one wants to maintain some other
-        minimal state of charge one has to model a smaller battery and shift all SOC values by the desired amount.
+        Add battery into the system. All "SOC" parameters are normalized value, 0-1.
         Args:
           capacity: battery capacity in kwh
           initial_soc: initial state of charge
+          final_soc: target SOC at the end of optimization cycle, SOC shall not be less than final_soc
+          min_soc: minimum depth of discharge, limits how low battery can discharge at any time
+          max_soc: maximum soc which battery will reach, useful when we want to preserve battery by not charging to 100%
           efficiency: round trip efficiency
           max_charge_power: maximum cgarging power
           max_discharge_power: maximum discharge power
@@ -94,6 +96,12 @@ class EnergyOptimizer():
           final_energy_value_per_kwh: estimated final value of energy after the last known hour;
             without it the controller would fully discharge the battery. 
         """  
+        # denormaliza variables
+        initial_soc = capacity * initial_soc
+        final_soc = capacity * final_soc
+        min_soc = capacity * min_soc
+        max_soc = capacity * max_soc
+
         assert max_charge_power > 0
         assert max_discharge_power > 0
         charge_rate = self._new_time_series(name, "charge_rate", lowBound = 0, upBound= max_charge_power)
@@ -103,7 +111,10 @@ class EnergyOptimizer():
         for hour in self.hours:
             self._add_to_energy_balance(hour, -charge_rate[hour] - discharge_rate[hour] * efficiency)
             self.problem += soc[hour] == current_soc + charge_rate[hour] + discharge_rate[hour] # Conservation of charge 
+            self.problem += soc[hour] <= max_soc
+            self.problem += soc[hour] >= min_soc
             current_soc = soc[hour]
+        self.problem += soc[self.n_hours-1] >= final_soc 
         amortization_cost = pulp.lpSum(charge_rate[hour] * cost_of_cycle_kwh for hour in self.hours)    
         remaining_value = current_soc * efficiency * final_energy_value_per_kwh
         self._add_cost(amortization_cost - remaining_value)
