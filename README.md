@@ -1,36 +1,33 @@
 household battery dispatch
 
- # Houshehold battery optimization scenario 
+ # Houshehold battery optimization
 
- Most of the battery optimization code I found optimizes trading scenarios of commercial battery installations. Household battery optimization 
-demands are different, so we try to develop a usable home battery optimization code.
+ Most of the battery optimization code we found optimizes trading scenarios of commercial battery installations. Household battery optimization demands are different from industrial uses, so we try to develop a usable home battery optimization code specifically targeting household usage.
 
- The aim of the code is to optimize household battery usage taking leverage of the hourly tarriff. The idea of the optimization is to shift 
-household energy consumption to cheapest hours.
-
- **Scenario**
-
- Household consumes power at rate of **hourly_consumption** (expressed as a list of values), which can be satisfied from the grid or battery.
-
- Battery can receive these commands:
- - charge - battery is charged at variable rate (not exceeding maximum rate setting), the same time all household consumption is satisfied from the 
-grid
- - idle - battery stays idle, so all the household consumption is drawn from the grid 
- - discharge - battery is satisfying household consumption by discharging, nothing is drawn from the grid 
-
- Function takes as input:
- - capacity of the battery,
- - hourly price of the electricity in the grid for the known hours,
- - titles of hours (e.g. Nordpool announces prices for tomorrow at 13.00 EET, so we use titles of hours not to lose track)
- - current SOC and target SOC which has to be achieved at the end of hours,
- - DOD, minimum depth of discharge
- - full charge/discharge cycle costs **cost_of_cycle**,
- - household's power demand per hour, 
-
- Function returns a dict containing hour, command CMD (e.g. positive number means rate of charge in kw, 0 is idle, negative number is a discharge 
-command) to manage behaviour of the battery, and projected SOC at end of this hour. 
-
- Function provides aggregated calculations of the optimization results
+ The code optimizes household battery usage leveraging hourly tarriff. Optimization shifts household energy consumption from most expensive to cheapes hours.
 
  The aim is to minimize price paid for electricity to the grid by the household. 
 
+ To model household consumption patern as closely as possible, algorithm allows to add separately various constraints/energy devises of the household:
+
+ - limit power of installed mains (this allows peak shaving scenarios),
+ - define battery and its characteristics (capacity, max charge, max discharge, max soc, min soc, etc)
+ - define fixed household consumption,
+ - define heat_pump operations
+ - define electrive vehicle operations
+
+ These devices / constrains can be added separately, so they would reflect actual household configuration, and optimize this specific scenario.
+ 
+ **Further plans**
+ Further we will add PV generation forecast into optimization scenario.
+
+ 
+
+ **Scenario**
+optim.py code with comments is self explanatory, and test_optim.py demonstrates usage of the code.
+
+**Output**
+Output of optimization if for your customization to your household automation environment.
+
+
+ 
