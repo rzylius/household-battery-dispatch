@@ -31,11 +31,17 @@ class EnergyOptimizer():
         self.energy_balance[hour] = self.energy_balance[hour] + energy   
         print(hour, self.energy_balance[hour])
 
-    def _new_time_series(self, device_name: str, var_name: str, lowBound=None, upBound=None):
+    def _new_time_series(self, device_name: str, var_name: str, lowBound=None, upBound=None, binary=False):
         """
         Create a new time series.
         """
-        var = pulp.LpVariable.dicts(device_name + "_" + var_name, self.hours, lowBound=lowBound, upBound=upBound)
+        if binary:
+            assert lowBound == None
+            assert upBound == None
+            var = pulp.LpVariable.dicts(device_name + "_" + var_name, self.hours, lowBound=0, upBound=1, cat='Integer')
+        else:
+            var = pulp.LpVariable.dicts(device_name + "_" + var_name, self.hours, lowBound=lowBound, upBound=upBound)
+
         if not device_name in self.vars:
             self.vars[device_name] = {}
         device_vars = self.vars[device_name]
@@ -65,34 +71,77 @@ class EnergyOptimizer():
                 var = device_vars[var_name]
                 device_series[var_name] = np.array([var[hour].varValue for hour in self.hours], dtype=np.float32)
             res[device_name] = device_series
-        return res      
+        return res
 
-    def add_mains_electricity_supply(self, name, max_power, hourly_prices):
+    def print_time_series(self, ts=None, prefix=''):
+        if ts is None:
+            ts = self.get_time_series()
+        for key, value in ts.items():
+            if type(value) is dict:
+                print(prefix + key + ':')
+                self.print_time_series(value, prefix + '    ')
+            else:
+                print(prefix + key + ':', value)
+
+    def add_mains_electricity_supply(self, name, max_import_power, import_hourly_prices, max_export_power=0, export_hourly_prices=None):
         """
         Add mains electricy supply the system. Optimizer can work with several different
         electricity supplies (for instance, mains supply and a diesel generator with estimated running costs as hourly_prices)
+        Args:
+          max_power: max power provided by the mains supply.
+          hourly_prices: hourly electricity prices
+          max_export_power: maximum export power provided by the mains supply
+          export_hourly_prices: either known export prices (if net billing is used) or estimated value of electricity credits 
+            if net metering is used; the later would most likely be waverage winter electricity tariffs after subtracting any 
+            'grid storage' fees.
         """
-        assert len(hourly_prices) == self.n_hours
-        electricity_import = self._new_time_series(name, "import", lowBound=0, upBound=max_power)
-        electricity_cost = pulp.lpSum(electricity_import[hour] * hourly_prices[hour] for hour in self.hours)
-        self._add_cost(electricity_cost)
+        assert max_import_power >= 0
+        assert max_export_power >= 0
+        assert len(import_hourly_prices) == self.n_hours
+        # dfirection: 0 for exports, 1 for imports.
+        direction = self._new_time_series(name, "direction", binary=True)
+        electricity_import = self._new_time_series(name, "import", lowBound=0, upBound=max_import_power)
+        electricity_export = self._new_time_series(name, "export", lowBound=-max_export_power, upBound=0)
+        electricity_import_cost = pulp.lpSum(electricity_import[hour] * import_hourly_prices[hour] for hour in self.hours)
+        self._add_cost(electricity_import_cost)
+        if max_export_power > 0:
+            assert len(export_hourly_prices) == self.n_hours
+            electricity_export_cost = pulp.lpSum(electricity_export[hour] * export_hourly_prices[hour] for hour in self.hours)
+            # the later cost is negative, so it is actually a profit.
+            self._add_cost(electricity_export_cost)
         for hour in self.hours:
-            self._add_to_energy_balance(hour, electricity_import[hour])
+            self._add_to_energy_balance(hour, electricity_import[hour] + electricity_export[hour])
+            # Make sure that we either import or export, but do not do both at the same time.
+            self.problem += electricity_import[hour] <= max_import_power * direction[hour]
+            self.problem += electricity_export[hour] >= -max_export_power * (1 - direction[hour])
+        
         return electricity_import
 
-    def add_battery(self, name, capacity, initial_soc, efficiency, max_charge_power, max_discharge_power, cost_of_cycle_kwh, final_energy_value_per_kwh):  
+    def _get_hourly(self, x, hour):
+        if isinstance(x, int):
+            return x
+        if isinstance(x, float):
+            return x
+        assert len(x) == self.n_hours    
+        return x[hour]    
+
+    def add_battery(self, name, capacity, initial_soc, efficiency,
+            max_charge_power, max_discharge_power, cost_of_cycle_kwh,
+            final_energy_value_per_kwh, min_soc=None, max_soc=None):  
         """
         Add battery into the system. Assumied minimal state of charge is 0 - if one wants to maintain some other
         minimal state of charge one has to model a smaller battery and shift all SOC values by the desired amount.
         Args:
           capacity: battery capacity in kwh
-          initial_soc: initial state of charge
+          initial_soc: initial state of charge (scalar)
           efficiency: round trip efficiency
           max_charge_power: maximum cgarging power
           max_discharge_power: maximum discharge power
           cost_of_cycle_kwh: estimated battery round trip amortization cost.
           final_energy_value_per_kwh: estimated final value of energy after the last known hour;
-            without it the controller would fully discharge the battery. 
+            without it the controller would fully discharge the battery.
+          min_soc: minimum final soc at the end each hour (scalar or time series)
+          max_soc: maximum final soc at the end of each hour (scalar or time series)
         """  
         assert max_charge_power > 0
         assert max_discharge_power > 0
@@ -104,6 +153,15 @@ class EnergyOptimizer():
             self._add_to_energy_balance(hour, -charge_rate[hour] - discharge_rate[hour] * efficiency)
             self.problem += soc[hour] == current_soc + charge_rate[hour] + discharge_rate[hour] # Conservation of charge 
             current_soc = soc[hour]
+            s0, s1 = None, None
+            if not min_soc is None:
+                s0 = self._get_hourly(min_soc, hour)
+                self.problem += current_soc >= s0
+            if not max_soc is None:
+                s1 = self._get_hourly(max_soc, hour)
+                self.problem += current_soc <= s1
+            if not s0 is None and not s1 is None:
+                assert s0 <= s1    
         amortization_cost = pulp.lpSum(charge_rate[hour] * cost_of_cycle_kwh for hour in self.hours)    
         remaining_value = current_soc * efficiency * final_energy_value_per_kwh
         self._add_cost(amortization_cost - remaining_value)
@@ -121,11 +179,25 @@ class EnergyOptimizer():
             self.problem += consumption[hour] == hourly_consumption[hour]
         return consumption
 
-    def add_consumption_by(self, name, max_power, min_cumulative_consuption):  
+    def add_solar_production(self, name, estimated_hourly_production):  
         """
-        Adds a total consumption demand by a fixed hour. Useful when planning charging of electric cars.
+        A solar plant with an extimated_hourly production.
+        Actual production may be lower if the system does not find a way to export or consume available energy. 
+        """
+        assert len(estimated_hourly_production) == self.n_hours
+        production = self._new_time_series(name, "production", lowBound = 0, upBound= np.amax(estimated_hourly_production))
+        for hour in self.hours:
+            self.problem += production[hour] >= 0
+            self.problem += production[hour] <= estimated_hourly_production[hour]
+            self._add_to_energy_balance(hour, production[hour])
+        return production
+
+    def add_flexible_consumption(self, name, max_power, min_cumulative_consuption):  
+        """
+        Adds a total cumulative consumption demand when it is not important when exactly it happens as long as it happens by some hour.
+        A good usecase is charging electric cars.
         max_power:
-          maximum charger power
+          maximum cunsuption power (would be max charging power in case of an EV)
         min_cumulative_consuption:
           energy consumption (e.g. electric car charging) that has to happen on or before a set hour. For instance, if the only
           demand is to have a car charged by 10kWh in 5 hours time, one can add min_cumulative_consuption=[0,0,0,0,10] requirement.
@@ -180,6 +252,4 @@ class EnergyOptimizer():
         # Reward for accumulating heat and penalize for final underheating.    
         self._add_cost((cumul_demand - cumul_power) * final_energy_value_per_kwh)
         return heating_power
-
-
 
