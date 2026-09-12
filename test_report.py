@@ -1,3 +1,6 @@
+import numpy as np
+from optim import EnergyOptimizer
+
 def check_bounds(values, minv, maxv, atol=0):
     assert atol >= 0
     if atol == 0:
@@ -8,8 +11,8 @@ def check_bounds(values, minv, maxv, atol=0):
         assert np.all(values <= maxv+atol)
 
 def check_at_most_one_nonzero(values1, values2, atol=0):
-    m1 = np.absolute(values1) >= atol
-    m2 = np.absolute(values2) >= atol
+    m1 = np.absolute(values1) > atol
+    m2 = np.absolute(values2) > atol
     assert np.all(np.logical_not(np.logical_and(m1, m2)))
 
 
@@ -83,5 +86,6 @@ def test_solar():
       )
 
     return
-    
-test_solar()
+
+if __name__ == "__main__":
+    test_solar()
