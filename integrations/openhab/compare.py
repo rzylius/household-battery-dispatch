@@ -16,9 +16,9 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pulp
 
-from household import HouseholdConfig
-from imeon_adapter import optimize
-from make_openhab_candidate import CONFIG_CONSTANTS
+from integrations.openhab.profile import HouseholdConfig
+from integrations.openhab.adapter import optimize
+from integrations.openhab.candidate import CONFIG_CONSTANTS
 from optim import OptimizationError
 
 

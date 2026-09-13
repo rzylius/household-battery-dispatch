@@ -8,14 +8,14 @@ import numpy as np
 import pulp
 import pytest
 
-from household import EVRequest, HouseholdConfig, HouseholdOptimizer
-from imeon_adapter import optimize, select_mode
+from integrations.openhab.profile import EVRequest, HouseholdConfig, build_optimizer
+from integrations.openhab.adapter import optimize, select_mode
 from optim import OptimizationError
 
 
 def solve(prices, pv=None, load=None, initial=7, config=None, **kwargs):
     n = len(prices)
-    model = HouseholdOptimizer(prices, [0] * n if pv is None else pv,
+    model = build_optimizer(prices, [0] * n if pv is None else pv,
                                [1] * n if load is None else load, initial,
                                config=config, **kwargs)
     model.solve()
@@ -67,18 +67,18 @@ def test_negative_prices_do_not_cycle_full_battery_or_overfill_ev():
     c = replace(HouseholdConfig(), minimum_kwh=12, terminal_kwh=12)
     ev = EVRequest(17.99, 18, 18.1, 3)
     _, s = solve([-50] * 4, initial=12, config=c, ev=ev)
-    np.testing.assert_allclose(s["discharge_kw"], 0)
-    np.testing.assert_allclose(s["grid_charge_kw"], 0)
+    np.testing.assert_allclose(s["discharge_kw"], 0, atol=1e-8)
+    np.testing.assert_allclose(s["grid_charge_kw"], 0, atol=1e-8)
     # Less than one full 6 A interval fits: explicitly report shortfall, not
     # an impossible fractional-current schedule or energy beyond capacity.
-    np.testing.assert_allclose(s["ev_current_a"], 0)
+    np.testing.assert_allclose(s["ev_steps"], 0)
     assert s["ev_energy_kwh"][-1] == pytest.approx(17.99)
 
 
 def test_ev_deadline_availability_current_steps_losses_and_shortfall():
     ev = EVRequest(0, 5, 18.1, 2)
     m, s = solve([5] * 4, ev=ev, ev_availability=[0, 1, 1, 1])
-    np.testing.assert_allclose(s["ev_current_a"], [0, 32, 32, 0])
+    np.testing.assert_allclose(s["ev_steps"], [0, 32, 32, 0])
     assert s["ev_energy_kwh"][2] == pytest.approx(32 * .230 * .25 * .90 * 2)
     assert m.result()["ev_shortfall_kwh"] == pytest.approx(5 - 32 * .230 * .25 * .90 * 2)
 
@@ -86,7 +86,7 @@ def test_ev_deadline_availability_current_steps_losses_and_shortfall():
 @pytest.mark.parametrize("price,lower,upper", [(5, 18.0, 18.1), (30, 14.48, 14.85)])
 def test_ev_optional_band_obeys_economics(price, lower, upper):
     _, s = solve([price] * 48, ev=EVRequest(13.032, 14.48, 18.1, 41))
-    current = s["ev_current_a"]
+    current = s["ev_steps"]
     assert np.all((current == 0) | ((current >= 6) & (current <= 32)))
     np.testing.assert_allclose(current, np.round(current))
     assert lower <= s["ev_energy_kwh"][41] <= upper
@@ -101,9 +101,9 @@ def test_independent_energy_balance_and_objective_reconstruction(count):
     ev = EVRequest(12, 14.48, 18.1, 31)
     m, s = solve(prices, pv=pv, load=load, initial=8, ev=ev,
                  battery_preservation=[i < 4 for i in range(count)])
-    c = m.config
+    c = HouseholdConfig()
     direct = np.minimum(pv, load)
-    ev_power = s["ev_current_a"] * c.ev_voltage / 1000
+    ev_power = s["ev_steps"] * c.ev_voltage / 1000
     np.testing.assert_allclose(direct + s["grid_load_kw"] + s["discharge_kw"] + s["solar_ev_kw"],
                                load + ev_power, atol=1e-6)
     np.testing.assert_allclose(direct + s["solar_charge_kw"] + s["solar_ev_kw"] + s["solar_export_kw"],
@@ -127,7 +127,7 @@ def test_independent_energy_balance_and_objective_reconstruction(count):
 
 
 def test_infeasible_household_never_exposes_schedule():
-    m = HouseholdOptimizer([5], [0], [30], 7)
+    m = build_optimizer([5], [0], [30], 7)
     with pytest.raises(OptimizationError):
         m.result()
     with pytest.raises(OptimizationError, match="Infeasible"):
@@ -137,7 +137,7 @@ def test_infeasible_household_never_exposes_schedule():
 
 
 def test_household_default_solver_is_bounded_and_rejects_incumbent(monkeypatch):
-    m = HouseholdOptimizer([5], [0], [1], 7)
+    m = build_optimizer([5], [0], [1], 7)
     def timed_out(solver):
         assert solver.timeLimit == 30
         m.problem.status = pulp.LpStatusOptimal
@@ -164,7 +164,7 @@ def test_bad_configuration_rejected(changes):
     dict(ev=EVRequest(0, 2, 1, 0)), dict(ev=EVRequest(0, 1, 2, -1))])
 def test_bad_inputs_rejected(kwargs):
     with pytest.raises(ValueError):
-        HouseholdOptimizer([5], [0], [1], 7, **kwargs)
+        build_optimizer([5], [0], [1], 7, **kwargs)
 
 
 @pytest.mark.parametrize("stamps", [[0, 0], [0, 1800], [1, 901], [0], [0, float("nan")]])

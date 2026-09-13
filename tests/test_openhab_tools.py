@@ -2,8 +2,8 @@ import ast
 
 import pytest
 
-from compare_openhab import load_legacy, validate_problem
-from make_openhab_candidate import CONFIG_CONSTANTS, build_candidate
+from integrations.openhab.compare import load_legacy, validate_problem
+from integrations.openhab.candidate import CONFIG_CONSTANTS, build_candidate
 from optim import OptimizationError
 import pulp
 

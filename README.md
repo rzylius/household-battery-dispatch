@@ -13,17 +13,27 @@ python example_15min.py
 The example uses synthetic 15-minute prices and forecasts. It imports the actual
 optimizer; it does not contain another copy of the optimization logic.
 
-## IMEON household integration
+## Generic engine and optional integrations
 
-`household.HouseholdOptimizer` adds explicit PV/grid charging sources,
-load-only battery discharge, separate charge/discharge efficiencies, wear on
-discharge, hard battery reserves, and integer-current EV charging. The pure
-`imeon_adapter.optimize` function produces the existing openHAB schedule format.
-It does not send commands. See [HOUSEHOLD_INTEGRATION.md](HOUSEHOLD_INTEGRATION.md)
-for units, configuration, offline comparison, and preparing a rule candidate.
+The reusable engine has no home-server, inverter-brand, location, tariff or
+installation-size defaults:
 
-The generic `EnergyOptimizer` API below retains its existing loss and wear
-conventions; the household profile is an explicit alternative.
+- `optim.py`: the existing composable `EnergyOptimizer` API described below.
+- `dispatch.py`: a generic source-aware `DispatchOptimizer`, with caller-supplied
+  battery/grid/charger specifications, export tariffs and permission masks.
+  It returns power flows and energy states, never device commands.
+- `integrations/openhab/`: optional files for one installation. `profile.py`
+  supplies that home's settings and policy; `adapter.py` calls the generic engine
+  and maps its results to openHAB schedule fields and IMEON modes. Replay and
+  candidate-generation tools live here too.
+
+Dependencies go **integration → engine**, never the reverse. Both engines work
+without the integration directory. No HABApp dependency is required by either.
+The existing `EnergyOptimizer` API retains its loss and wear conventions.
+
+Run `python example_dispatch.py` for a standalone generic example, or read
+[DISPATCH_ENGINE.md](DISPATCH_ENGINE.md) for its API. The installation-specific
+instructions are in [integrations/openhab/README.md](integrations/openhab/README.md).
 
 ## 15-minute intervals
 

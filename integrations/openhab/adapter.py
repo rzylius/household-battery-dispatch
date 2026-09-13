@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from household import EVRequest, HouseholdConfig, HouseholdOptimizer
+from dispatch import EVRequest
+from integrations.openhab.profile import HouseholdConfig, build_optimizer, preservation_mask
 
 
 def optimize(timestamps, prices, solar_kw, solar_p50_kw, load_kw, initial_energy,
@@ -42,8 +43,9 @@ def optimize(timestamps, prices, solar_kw, solar_p50_kw, load_kw, initial_energy
             raise ValueError("EV deadline must include a full interval and be within the horizon")
         ev = EVRequest(ev_input["initial_energy_kwh"], ev_input["minimum_target_kwh"],
                        ev_input["full_target_kwh"], int(eligible[-1]))
-    model = HouseholdOptimizer(prices, solar_kw, load_kw, initial_energy,
-                               config=c, ev=ev, battery_preservation=battery_preservation)
+    preserved = preservation_mask(battery_preservation, count)
+    model = build_optimizer(prices, solar_kw, load_kw, initial_energy,
+                            config=c, ev=ev, battery_preservation=preserved)
     p50 = model._series(solar_p50_kw, "solar_p50_kw", minimum=0)
     model.solve(solver)
     result = model.result()
@@ -51,13 +53,13 @@ def optimize(timestamps, prices, solar_kw, solar_p50_kw, load_kw, initial_energy
     rows = []
     for i in model.intervals:
         raw = {name: float(values[i]) for name, values in s.items()}
-        current = int(round(raw["ev_current_a"]))
-        mode = select_mode(raw, model.solar_kw[i], model.prices[i], model.preserved[i], c)
+        current = int(round(raw["ev_steps"]))
+        mode = select_mode(raw, model.solar_kw[i], model.prices[i], preserved[i], c)
         rows.append({
             "timestamp": int(stamps[i]), "datetime": datetime.fromtimestamp(stamps[i], tz).isoformat(),
-            "battery_preserved": bool(model.preserved[i]), "price": round(float(model.prices[i]), 6),
+            "battery_preserved": bool(preserved[i]), "price": round(float(model.prices[i]), 6),
             "load_kw": round(float(model.load_kw[i]), 3), "solar_kw": round(float(model.solar_kw[i]), 3),
-            "solar_p50_kw": round(float(p50[i]), 3), "solar_direct_kw": round(float(model.direct_solar[i]), 3),
+            "solar_p50_kw": round(float(p50[i]), 3), "solar_direct_kw": round(raw["solar_load_kw"], 3),
             **{name: round(raw[name], 3) for name in (
                 "solar_charge_kw", "solar_export_kw", "solar_ev_kw", "grid_load_kw",
                 "grid_charge_kw", "discharge_kw", "energy_kwh")},

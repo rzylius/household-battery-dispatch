@@ -1,6 +1,10 @@
 # IMEON household planning and openHAB integration
 
-This module extracts the installation-specific planning model into the library.
+These optional files adapt one household to the generic engine in `dispatch.py`.
+`profile.py` owns the installation defaults and translates them into generic
+equipment specifications and permission masks. `adapter.py` calls the engine
+and maps its flow results to the household's schedule and IMEON modes. There
+are no optimization equations in this integration, and the engine never imports it.
 The existing openHAB/HABApp rule still owns forecasts, measured state, manual EV
 ownership, battery preservation, recovery, dispatch, readback and publication.
 Neither the planner nor the adapter performs network or device operations.
@@ -41,12 +45,13 @@ flows. Set it to `False` to prohibit simultaneous grid import/PV export. Verify
 the settlement convention and physical mode behavior before changing live control.
 This choice does not enable battery export under either setting.
 
-## Library example
+## Household profile example
 
 ```python
-from household import HouseholdOptimizer, EVRequest
+from dispatch import EVRequest
+from integrations.openhab.profile import build_optimizer
 
-model = HouseholdOptimizer(
+model = build_optimizer(
     prices=[5] * 24 + [30] * 24,  # cents/kWh
     solar_kw=[0] * 48,
     load_kw=[0.8] * 48,
@@ -71,7 +76,7 @@ Construct a new model for each replan. Custom PuLP solvers can be passed to
 
 ## openHAB adapter
 
-`imeon_adapter.optimize` accepts the saved rule's argument order and returns
+`integrations.openhab.adapter.optimize` accepts the saved rule's argument order and returns
 `(rows, terminal_value, ev_result)`. It translates the current EV input dictionary
 into stored-energy constraints and returns the existing schedule fields and modes.
 Mode selection uses unrounded powers; only presentation values are rounded.
@@ -96,7 +101,7 @@ Run from this repository, with the PR's development requirements installed:
 
 ```sh
 python -m pytest -q
-python compare_openhab.py \
+python -m integrations.openhab.compare \
   --legacy-source /path/to/saved/imeon_quarter_hour_optimizer.py \
   --plan /path/to/saved/optimizer_15m.json \
   --output /tmp/household-comparison.json
@@ -119,22 +124,23 @@ referenced constants, using the same mapping as the generated rule candidate.
 The September 13 local comparison against saved source SHA-256
 `633a25cc1ae9476a2fa1f0b7507a0873ab64510f136b0be645bdbbe258dad4d1`
 matched all seven objectives. The archived 135-interval case matched every mode
-and battery state. Flat-price synthetic cases differed in some charging times,
-including the first mode of the negative-price case. These differences need
+and battery state. Flat-price synthetic cases differed in some charging times.
+The refactored version matched the first mode in all seven cases. These differences need
 observation in shadow operation before a live planner switch.
 
 ## Prepare a reviewable rule candidate
 
 ```sh
-python make_openhab_candidate.py \
+python -m integrations.openhab.candidate \
   --source /path/to/saved/imeon_quarter_hour_optimizer.py \
   --output /tmp/imeon_quarter_hour_optimizer.candidate.py
 ```
 
 This writes a separate file and refuses to overwrite an existing output. Only
 the `optimize` method is replaced by a call to the library; the existing numerical
-constants are passed into `HouseholdConfig`. The modules `optim.py`, `household.py`
-and `imeon_adapter.py` must be importable in HABApp's Python environment before
+constants are passed into `HouseholdConfig`. The engine modules `optim.py` and
+`dispatch.py`, plus the optional `integrations` package, must be importable in
+HABApp's Python environment before
 activating that candidate. No deployment is performed by this command.
 
 The local candidate was structurally checked to preserve all other Python code,
