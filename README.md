@@ -13,6 +13,18 @@ python example_15min.py
 The example uses synthetic 15-minute prices and forecasts. It imports the actual
 optimizer; it does not contain another copy of the optimization logic.
 
+## IMEON household integration
+
+`household.HouseholdOptimizer` adds explicit PV/grid charging sources,
+load-only battery discharge, separate charge/discharge efficiencies, wear on
+discharge, hard battery reserves, and integer-current EV charging. The pure
+`imeon_adapter.optimize` function produces the existing openHAB schedule format.
+It does not send commands. See [HOUSEHOLD_INTEGRATION.md](HOUSEHOLD_INTEGRATION.md)
+for units, configuration, offline comparison, and preparing a rule candidate.
+
+The generic `EnergyOptimizer` API below retains its existing loss and wear
+conventions; the household profile is an explicit alternative.
+
 ## 15-minute intervals
 
 ```python
