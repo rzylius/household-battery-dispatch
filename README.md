@@ -13,6 +13,28 @@ python example_15min.py
 The example uses synthetic 15-minute prices and forecasts. It imports the actual
 optimizer; it does not contain another copy of the optimization logic.
 
+## Generic engine and optional integrations
+
+The reusable engine has no home-server, inverter-brand, location, tariff or
+installation-size defaults:
+
+- `optim.py`: the existing composable `EnergyOptimizer` API described below.
+- `dispatch.py`: a generic source-aware `DispatchOptimizer`, with caller-supplied
+  battery/grid/charger specifications, export tariffs and permission masks.
+  It returns power flows and energy states, never device commands.
+- `integrations/openhab/`: optional files for one installation. `profile.py`
+  supplies that home's settings and policy; `adapter.py` calls the generic engine
+  and maps its results to openHAB schedule fields and IMEON modes. Replay and
+  candidate-generation tools live here too.
+
+Dependencies go **integration → engine**, never the reverse. Both engines work
+without the integration directory. No HABApp dependency is required by either.
+The existing `EnergyOptimizer` API retains its loss and wear conventions.
+
+Run `python example_dispatch.py` for a standalone generic example, or read
+[DISPATCH_ENGINE.md](DISPATCH_ENGINE.md) for its API. The installation-specific
+instructions are in [integrations/openhab/README.md](integrations/openhab/README.md).
+
 ## 15-minute intervals
 
 ```python
