@@ -13,14 +13,14 @@ def check_bounds(values, minv, maxv, atol=0):
         assert np.all(values <= maxv+atol)
 
 def check_at_most_one_nonzero(values1, values2, atol=0):
-    m1 = np.absolute(values1) >= atol
-    m2 = np.absolute(values2) >= atol
+    m1 = np.absolute(values1) > atol
+    m2 = np.absolute(values2) > atol
     assert np.all(np.logical_not(np.logical_and(m1, m2)))
 
 
 def test_battery():
     # Without the battery the below consumption demand is unsolvable, as it iexceeds supply power
-    
+
     n = 24
     optimizer = EnergyOptimizer(n)
 
@@ -43,7 +43,7 @@ def test_battery():
         name='battery', capacity=battery_capacity, initial_soc=initial_soc, efficiency=efficiency,
         max_charge_power=max_charge_power, max_discharge_power=max_discharge_power,
         cost_of_cycle_kwh=1, final_energy_value_per_kwh=12, min_soc=min_soc, max_soc=max_soc)
-    
+
     # Set fixed consumption schedule.
     hourly_consumption = [1, 1, 2, 1, 1, 1, 2, 1, 2, 5, 1, 2, 3, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     optimizer.add_fixed_consumption(name='consumption', hourly_consumption=hourly_consumption)
@@ -57,7 +57,7 @@ def test_battery():
 
     atol = 1e-10
     # Test constraints.
-    check_bounds(series['mains']['import'], 0.0, max_import_power, atol=atol) 
+    check_bounds(series['mains']['import'], 0.0, max_import_power, atol=atol)
     check_bounds(series['mains']['export'], -max_export_power, 0.0, atol=atol)
     check_at_most_one_nonzero(series['mains']['import'], series['mains']['export'], atol=atol)
     check_bounds(series['battery']['discharge_rate'], -max_discharge_power, 0)
@@ -106,19 +106,19 @@ def test_solar():
         name='battery', capacity=battery_capacity, initial_soc=initial_soc, efficiency=efficiency,
         max_charge_power=max_charge_power, max_discharge_power=max_discharge_power,
         cost_of_cycle_kwh=1, final_energy_value_per_kwh=12)
-    
+
     # Solve the optimization problem.
     optimizer.solve()
 
     # Obtain solved time series as a nested dict of numpy arrays.
     series = optimizer.get_time_series()
-    optimizer.print_time_series() 
+    optimizer.print_time_series()
 
     atol = 1e-10
     # Test constraints.
-    check_bounds(series['mains']['import'], 0.0, max_import_power, atol=atol) 
+    check_bounds(series['mains']['import'], 0.0, max_import_power, atol=atol)
     check_bounds(series['mains']['export'], -max_export_power, 0.0, atol=atol)
-    check_at_most_one_nonzero(series['mains']['import'], series['mains']['export'], atol=atol) 
+    check_at_most_one_nonzero(series['mains']['import'], series['mains']['export'], atol=atol)
     check_bounds(series['battery']['discharge_rate'], -max_discharge_power, 0)
     check_bounds(series['battery']['charge_rate'], 0, max_charge_power)
     check_bounds(series['battery']['soc'], 0, battery_capacity)
@@ -135,14 +135,14 @@ def simple_heatpump_example():
     hourly_heating_demand= [1.2, 2, 1, 1.5, 1.7, 1.8, 1.3, 1.7, 2.1, 3.3, 1.2, 2.7, 1.2, 2.3, 1.2, 1.1, 1.3, 1.2, 1.7, 2.1, 2.5, 2.7, 2.8, 2.9]
     min_ev_charge_by_hour= [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,47,0,0,0,0,0,0]
     final_energy_value_per_kwh = 12
-   
+
     optimizer = EnergyOptimizer(len(hourly_prices))
 
     electricity_import = optimizer.add_mains_electricity_supply(name='eso', max_import_power=10, import_hourly_prices=hourly_prices, max_export_power=0)
     soc, charge_rate, discharge_rate = optimizer.add_battery(name='battery', capacity=15, initial_soc=10, efficiency=0.95, max_charge_power=5, max_discharge_power=5, cost_of_cycle_kwh=1, final_energy_value_per_kwh=final_energy_value_per_kwh)
     consumption = optimizer.add_fixed_consumption(name='consumption', hourly_consumption=hourly_consumption)
-    heating_power = optimizer.add_heating_consumption(name='heatpump', max_heat_power=3.0, hourly_demand=hourly_heating_demand, tol_cumul_min=-2, tol_cumul_max=2, final_energy_value_per_kwh=final_energy_value_per_kwh)  
-    ev_charging = optimizer.add_flexible_consumption(name='ev_charging', max_power=5.0, min_cumulative_consuption=min_ev_charge_by_hour)  
+    heating_power = optimizer.add_heating_consumption(name='heatpump', max_heat_power=3.0, hourly_demand=hourly_heating_demand, tol_cumul_min=-2, tol_cumul_max=2, final_energy_value_per_kwh=final_energy_value_per_kwh)
+    ev_charging = optimizer.add_flexible_consumption(name='ev_charging', max_power=5.0, min_cumulative_consuption=min_ev_charge_by_hour)
 
     optimizer.solve()
 
@@ -150,6 +150,7 @@ def simple_heatpump_example():
     optimizer.print_time_series()
 
 
-test_battery()
-test_solar()
-simple_heatpump_example()
+if __name__ == "__main__":
+    test_battery()
+    test_solar()
+    simple_heatpump_example()
